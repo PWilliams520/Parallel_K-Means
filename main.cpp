@@ -4,11 +4,12 @@
 #include <fstream>
 #include <vector>
 #include <cmath>
-//#include "testing.h"
+#include "testing.h"
 #include <streambuf>
 #include <numeric>
 #include <random>
 #include <algorithm>
+#include <unordered_map>
 
 namespace fs = std::__fs::filesystem;
 using namespace std;
@@ -127,13 +128,25 @@ string trim(const string& s)
     return (start == string::npos) ? "" : s.substr(start);
 }
 
+struct VectorHasher {
+    int operator()(const vector<double> &V) const {
+        int hash=0;
+        for(int i : V) {
+            hash+=i; // Can be anything
+        }
+        return hash;
+    }
+};
+
 int main() {
 
     string path = "/Users/patrick/CLionProjects/K_Means/Assignment4";
     vector<vector<double>> all_feature_vectors;
+    unordered_map<vector<double>, string, VectorHasher> dict;
     for (const auto & entry : fs::directory_iterator(path)) {
-        cout << entry.path() << endl;
-        ifstream myfile(entry.path());
+//        cout << entry.path() << endl;
+        string file_path = entry.path().string();
+        ifstream myfile(file_path);
         string line;
         string file_str;
         int lines_code = 0;
@@ -155,22 +168,32 @@ int main() {
         double code_percent = (double)lines_code / line_count;
         int bracket_count = count(file_str, "{");
         int comment_count = count(file_str, "//") + count(file_str, "*/");
-        cout << "Bracket Count: " << bracket_count << endl;
-        cout << "Comment Count: " << comment_count << endl;
-        cout << "% Code: " << code_percent << endl;
+//        cout << "Bracket Count: " << bracket_count << endl;
+//        cout << "Comment Count: " << comment_count << endl;
+//        cout << "% Code: " << code_percent << endl;
         file_features.push_back(bracket_count);
         file_features.push_back(comment_count);
         file_features.push_back(code_percent);
+        dict[file_features] = file_path;
         all_feature_vectors.push_back(file_features);
+//        cout << dict[file_features] << endl;
 
     }
     vector<double> mean = calculate_mean_vector(all_feature_vectors);
     double s = WCSS(all_feature_vectors, mean);
+
     vector<vector<vector<double>>> clusters = k_means_clustering(all_feature_vectors, 7);
+
+    int cluster_index = 0;
     for(vector<vector<double>> cluster : clusters){
-        cout << WCSS(cluster, calculate_mean_vector(cluster)) << endl;
+        cout << "Cluster " << cluster_index + 1 << ": " << endl;
+        for(vector<double> v : cluster){
+            cout << dict[v] << endl;
+        }
+        cout << "WCSS: " << WCSS(cluster, calculate_mean_vector(cluster)) << endl << endl;
+        cluster_index++;
     }
     double b = BCSS(clusters, mean);
-    cout << b << endl;
+    cout << "BCSS: " << b << endl;
 //    test();
 }
