@@ -3,13 +3,13 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
-#include <cmath>
-#include "testing.h"
 #include <streambuf>
 #include <numeric>
 #include <random>
 #include <algorithm>
 #include <unordered_map>
+#include <omp.h>
+#include <ctime>
 
 namespace fs = std::__fs::filesystem;
 using namespace std;
@@ -32,11 +32,13 @@ vector<vector<double>> choose_initial_centroids(vector<vector<double>> feature_v
     vector<double> min_dist_list(feature_vectors.size());
     double sum;
     for(int i=1; i < k; i++){
+        #pragma omp parallel for shared(feature_vectors, centroid_list, distance_list) default(none)
         for(int j=0; j<feature_vectors.size(); j++){
             for(const vector<double>& centroid : centroid_list) {
                 distance_list[j].push_back(calculate_distance(feature_vectors[j], centroid));
             }
         }
+        #pragma omp parallel for shared(distance_list, min_dist_list) default(none)
         for(int j=0; j<distance_list.size(); j++){
             min_dist_list[j] = pow(*min_element(distance_list[j].begin(), distance_list[j].end()), 2);
         }
@@ -81,34 +83,35 @@ double WCSS(const vector<vector<double>>& cluster, const vector<double>& centroi
 }
 
 double BCSS(const vector<vector<vector<double>>>& all_clusters, vector<double> centroid){
-vector<double> result;
-for(vector<vector<double>> cluster : all_clusters){
-result.push_back(cluster.size() * pow(calculate_distance(centroid, calculate_mean_vector(cluster)), 2));
-}
-return accumulate(result.begin(), result.end(), 0);
+    vector<double> result;
+    for(vector<vector<double>> cluster : all_clusters){
+        result.push_back(cluster.size() * pow(calculate_distance(centroid, calculate_mean_vector(cluster)), 2));
+    }
+    return accumulate(result.begin(), result.end(), 0);
 }
 
 vector<vector<vector<double>>> k_means_clustering(vector<vector<double>> feature_vectors, int k) {
-vector<vector<double>> centroid_list = choose_initial_centroids(feature_vectors, k);
-vector<vector<vector<double>>> result_clusters(k);
-for (int i = 0; i <= 10; i++) {
-for(vector<vector<double>> & cluster : result_clusters){
-cluster.clear();
-}
-for (vector<double> vec : feature_vectors) {
-vector<double> compare_list(k, 0);
-for (int j = 0; j < centroid_list.size(); j++) {
-compare_list[j] = calculate_distance(vec, centroid_list[j]);
-}
+    vector<vector<double>> centroid_list = choose_initial_centroids(feature_vectors, k);
+    vector<vector<vector<double>>> result_clusters(k);
+    for (int i = 0; i <= 10; i++) {
+        for(vector<vector<double>> & cluster : result_clusters){
+            cluster.clear();
+        }
+        for (vector<double> vec : feature_vectors) {
+            vector<double> compare_list(k, 0);
+            #pragma omp parallel for shared(centroid_list, compare_list, vec) default(none)
+            for (int j = 0; j < centroid_list.size(); j++) {
+                compare_list[j] = calculate_distance(vec, centroid_list[j]);
+            }
 //            double min = *min_element(compare_list.begin(), compare_list.end());
-int min_index = min_element(compare_list.begin(), compare_list.end()) - compare_list.begin();
-result_clusters[min_index].push_back(vec);
-}
-for(int j = 0; j < centroid_list.size(); j++){
-centroid_list[j] = calculate_mean_vector(result_clusters[j]);
-}
-}
-return result_clusters;
+            int min_index = min_element(compare_list.begin(), compare_list.end()) - compare_list.begin();
+            result_clusters[min_index].push_back(vec);
+        }
+        for(int j = 0; j < centroid_list.size(); j++){
+            centroid_list[j] = calculate_mean_vector(result_clusters[j]);
+        }
+    }
+    return result_clusters;
 }
 
 int count(const string& str, const string& search_for){
@@ -143,7 +146,13 @@ int main() {
     string path = "/Users/patrick/CLionProjects/K_Means/Assignment4";
     vector<vector<double>> all_feature_vectors;
     unordered_map<vector<double>, string, VectorHasher> dict;
-    for (const auto & entry : fs::directory_iterator(path)) {
+    double start_mergeSort = omp_get_wtime();
+    fs::directory_iterator iterator = fs::directory_iterator(path);
+//    #pragma omp parallel for
+//    for(fs::directory_entry x=iterator; x != nullptr; x++){
+//
+//    }
+    for(const auto & entry : fs::directory_iterator(path)) {
 //        cout << entry.path() << endl;
         string file_path = entry.path().string();
         ifstream myfile(file_path);
@@ -194,6 +203,8 @@ int main() {
         cluster_index++;
     }
     double b = BCSS(clusters, mean);
+    double elapsed_mergeSort = omp_get_wtime() - start_mergeSort;
     cout << "BCSS: " << b << endl;
+    cout << "Time: " << elapsed_mergeSort << endl;
 //    test();
 }
