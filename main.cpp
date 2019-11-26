@@ -1,0 +1,176 @@
+#include <iostream>
+#include <string>
+#include <filesystem>
+#include <fstream>
+#include <vector>
+#include <cmath>
+//#include "testing.h"
+#include <streambuf>
+#include <numeric>
+#include <random>
+#include <algorithm>
+
+namespace fs = std::__fs::filesystem;
+using namespace std;
+
+double calculate_distance(vector<double> x, vector<double> y){
+    double euclidean = 0;
+    for (int i =0; i < x.size(); i++) {
+        euclidean += pow((y[i] - x[i]), 2);
+    }
+    return sqrt(euclidean);
+}
+
+vector<vector<double>> choose_initial_centroids(vector<vector<double>> feature_vectors, int k){
+    vector<vector<double>> centroid_list;
+    std::random_device random_device;
+    std::mt19937 engine{random_device()};
+    std::uniform_int_distribution<int> dist(0, feature_vectors.size() - 1);
+    centroid_list.push_back(feature_vectors[dist(engine)]);
+    vector<vector<double>> distance_list(feature_vectors.size());
+    vector<double> min_dist_list(feature_vectors.size());
+    double sum;
+    for(int i=1; i < k; i++){
+        for(int j=0; j<feature_vectors.size(); j++){
+            for(const vector<double>& centroid : centroid_list) {
+                distance_list[j].push_back(calculate_distance(feature_vectors[j], centroid));
+            }
+        }
+        for(int j=0; j<distance_list.size(); j++){
+            min_dist_list[j] = pow(*min_element(distance_list[j].begin(), distance_list[j].end()), 2);
+        }
+        sum = accumulate(min_dist_list.begin(), min_dist_list.end(), 0);
+        for(double & min : min_dist_list){
+            min /= sum;
+        }
+
+        sum = accumulate(min_dist_list.begin(), min_dist_list.end(), 0);
+        double f = (double)rand() / RAND_MAX;
+        double rnd = f * sum;
+        for(int i=0; i<min_dist_list.size(); i++) {
+            if(rnd < min_dist_list[i]){
+                centroid_list.push_back(feature_vectors[i]);
+                break;
+            }
+            rnd -= min_dist_list[i];
+        }
+    }
+    return centroid_list;
+}
+
+vector<double> calculate_mean_vector(vector<vector<double>> cluster){
+    vector<double> result(cluster[0].size(), 0);
+    for(vector<double> item : cluster){
+        for(int i=0; i < item.size(); i++){
+            result[i] += item[i];
+        }
+    }
+    for(double & i : result){
+        i /= cluster.size();
+    }
+    return result;
+}
+
+double WCSS(const vector<vector<double>>& cluster, const vector<double>& centroid){
+    vector<double> result;
+    for(vector<double> item : cluster){
+        result.push_back(pow(calculate_distance(item, centroid), 2));
+    }
+    return accumulate(result.begin(), result.end(), 0);
+}
+
+double BCSS(const vector<vector<vector<double>>>& all_clusters, vector<double> centroid){
+vector<double> result;
+for(vector<vector<double>> cluster : all_clusters){
+result.push_back(cluster.size() * pow(calculate_distance(centroid, calculate_mean_vector(cluster)), 2));
+}
+return accumulate(result.begin(), result.end(), 0);
+}
+
+vector<vector<vector<double>>> k_means_clustering(vector<vector<double>> feature_vectors, int k) {
+vector<vector<double>> centroid_list = choose_initial_centroids(feature_vectors, k);
+vector<vector<vector<double>>> result_clusters(k);
+for (int i = 0; i <= 10; i++) {
+for(vector<vector<double>> & cluster : result_clusters){
+cluster.clear();
+}
+for (vector<double> vec : feature_vectors) {
+vector<double> compare_list(k, 0);
+for (int j = 0; j < centroid_list.size(); j++) {
+compare_list[j] = calculate_distance(vec, centroid_list[j]);
+}
+//            double min = *min_element(compare_list.begin(), compare_list.end());
+int min_index = min_element(compare_list.begin(), compare_list.end()) - compare_list.begin();
+result_clusters[min_index].push_back(vec);
+}
+for(int j = 0; j < centroid_list.size(); j++){
+centroid_list[j] = calculate_mean_vector(result_clusters[j]);
+}
+}
+return result_clusters;
+}
+
+int count(const string& str, const string& search_for){
+    int nPos = str.find(search_for, 0);
+    int counted = 0;
+    while (nPos != string::npos)
+    {
+        counted++;
+        nPos = str.find(search_for, nPos + 1);
+    }
+    return counted;
+}
+
+string trim(const string& s)
+{
+    size_t start = s.find_first_not_of(' ');
+    return (start == string::npos) ? "" : s.substr(start);
+}
+
+int main() {
+
+    string path = "/Users/patrick/CLionProjects/K_Means/Assignment4";
+    vector<vector<double>> all_feature_vectors;
+    for (const auto & entry : fs::directory_iterator(path)) {
+        cout << entry.path() << endl;
+        ifstream myfile(entry.path());
+        string line;
+        string file_str;
+        int lines_code = 0;
+        int line_count = 0;
+        vector<double> file_features;
+        if (myfile.is_open()) {
+            while (getline(myfile, line)) {
+                line_count++;
+                file_str += line + '\n';
+                line = trim(line);
+                if(!(line.find("import", 0) == 0 || line.find("//", 0) == 0 || line.find("{", 0) == 0 || line.find("}", 0) == 0 || line == "")){
+                    lines_code++;
+//need to strip whitespace from lines
+                }
+//                cout << line << '\n';
+            }
+            myfile.close();
+        }
+        double code_percent = (double)lines_code / line_count;
+        int bracket_count = count(file_str, "{");
+        int comment_count = count(file_str, "//") + count(file_str, "*/");
+        cout << "Bracket Count: " << bracket_count << endl;
+        cout << "Comment Count: " << comment_count << endl;
+        cout << "% Code: " << code_percent << endl;
+        file_features.push_back(bracket_count);
+        file_features.push_back(comment_count);
+        file_features.push_back(code_percent);
+        all_feature_vectors.push_back(file_features);
+
+    }
+    vector<double> mean = calculate_mean_vector(all_feature_vectors);
+    double s = WCSS(all_feature_vectors, mean);
+    vector<vector<vector<double>>> clusters = k_means_clustering(all_feature_vectors, 7);
+    for(vector<vector<double>> cluster : clusters){
+        cout << WCSS(cluster, calculate_mean_vector(cluster)) << endl;
+    }
+    double b = BCSS(clusters, mean);
+    cout << b << endl;
+//    test();
+}
