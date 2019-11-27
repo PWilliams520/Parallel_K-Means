@@ -64,6 +64,7 @@ vector<vector<double>> choose_initial_centroids(vector<vector<double>> feature_v
 vector<double> calculate_mean_vector(vector<vector<double>> cluster){
     vector<double> result(cluster[0].size(), 0);
     for(vector<double> item : cluster){
+//        #pragma omp parallel for shared(result, item) default(none)
         for(int i=0; i < item.size(); i++){
             result[i] += item[i];
         }
@@ -107,6 +108,7 @@ vector<vector<vector<double>>> k_means_clustering(vector<vector<double>> feature
             int min_index = min_element(compare_list.begin(), compare_list.end()) - compare_list.begin();
             result_clusters[min_index].push_back(vec);
         }
+        #pragma omp parallel for shared(centroid_list, result_clusters) default(none)
         for(int j = 0; j < centroid_list.size(); j++){
             centroid_list[j] = calculate_mean_vector(result_clusters[j]);
         }
@@ -142,19 +144,29 @@ struct VectorHasher {
 };
 
 int main() {
-
-    string path = "/Users/patrick/CLionProjects/K_Means/Assignment4";
-    vector<vector<double>> all_feature_vectors;
-    unordered_map<vector<double>, string, VectorHasher> dict;
-    double start_mergeSort = omp_get_wtime();
+    omp_set_num_threads(4);
+    string path = "/Users/patrick/CLionProjects/Parallel_K-Means/Set1";
+//    string path = "/Users/patrick/CLionProjects/Parallel_K-Means/691_Data";
+    vector<string> filenames;
+    for(const auto & iter : fs::directory_iterator(path)) {
+        filenames.push_back(iter.path());
+    }
+    vector<vector<double>> all_feature_vectors(filenames.size());
+//    unordered_map<vector<double>, string, VectorHasher> dict;
+    double start_feature_extraction = omp_get_wtime();
     fs::directory_iterator iterator = fs::directory_iterator(path);
 //    #pragma omp parallel for
 //    for(fs::directory_entry x=iterator; x != nullptr; x++){
 //
 //    }
-    for(const auto & entry : fs::directory_iterator(path)) {
-//        cout << entry.path() << endl;
-        string file_path = entry.path().string();
+
+//    fs::directory_iterator container = fs::directory_iterator(path);
+//    #pragma omp parallel for
+//    for(auto iter = begin(container); iter != end(container); iter++) {
+    #pragma omp parallel for shared(all_feature_vectors, filenames) default(none)
+    for(int i=0; i < filenames.size(); i++) {
+//        cout << iter->path() << endl;
+        string file_path = filenames[i];
         ifstream myfile(file_path);
         string line;
         string file_str;
@@ -183,28 +195,34 @@ int main() {
         file_features.push_back(bracket_count);
         file_features.push_back(comment_count);
         file_features.push_back(code_percent);
-        dict[file_features] = file_path;
-        all_feature_vectors.push_back(file_features);
+//        dict[file_features] = file_path;
+        all_feature_vectors[i] = file_features;
+        file_features.clear();
 //        cout << dict[file_features] << endl;
 
     }
+
+    double elapsed_feature_extraction = omp_get_wtime() - start_feature_extraction;
+    cout << "Feature Extraction Time: " << elapsed_feature_extraction << endl;
+    double start_clustering = omp_get_wtime();
     vector<double> mean = calculate_mean_vector(all_feature_vectors);
     double s = WCSS(all_feature_vectors, mean);
 
     vector<vector<vector<double>>> clusters = k_means_clustering(all_feature_vectors, 7);
 
-    int cluster_index = 0;
-    for(vector<vector<double>> cluster : clusters){
-        cout << "Cluster " << cluster_index + 1 << ": " << endl;
-        for(vector<double> v : cluster){
-            cout << dict[v] << endl;
-        }
-        cout << "WCSS: " << WCSS(cluster, calculate_mean_vector(cluster)) << endl << endl;
-        cluster_index++;
-    }
-    double b = BCSS(clusters, mean);
-    double elapsed_mergeSort = omp_get_wtime() - start_mergeSort;
-    cout << "BCSS: " << b << endl;
-    cout << "Time: " << elapsed_mergeSort << endl;
+//    int cluster_index = 0;
+//    for(vector<vector<double>> cluster : clusters){
+//        cout << "Cluster " << cluster_index + 1 << " size: " << cluster.size() << endl;
+////        cout << "Cluster " << cluster_index + 1 << ": " << endl;
+////        for(vector<double> v : cluster){
+////            cout << dict[v] << endl;
+////        }
+//        cout << "WCSS: " << WCSS(cluster, calculate_mean_vector(cluster)) << endl << endl;
+//        cluster_index++;
+//    }
+//    double b = BCSS(clusters, mean);
+    double elapsed_clustering = omp_get_wtime() - start_clustering;
+//    cout << "BCSS: " << b << endl;
+    cout << "        Clustering Time: " << elapsed_clustering << endl;
 //    test();
 }
