@@ -2,7 +2,6 @@
 #include <string>
 #include <boost/filesystem.hpp>
 #include <boost/range.hpp>
-// #include <filesystem>
 #include <fstream>
 #include <vector>
 #include <streambuf>
@@ -13,10 +12,7 @@
 #include <omp.h>
 #include <ctime>
  
-
-// namespace fs = std::__fs::filesystem;
 using namespace std;
-// using namespace boost::filesystem;
 
 double calculate_distance(vector<double> x, vector<double> y){
     double euclidean = 0;
@@ -36,19 +32,17 @@ vector<vector<double>> choose_initial_centroids(vector<vector<double>> feature_v
     vector<double> min_dist_list(feature_vectors.size());
     double sum;
     for(int i=1; i < k; i++){
-        #pragma omp parallel for shared(feature_vectors, centroid_list, distance_list) default(none)
+        #pragma omp parallel for shared(feature_vectors, centroid_list, distance_list, min_dist_list) default(none)
         for(int j=0; j<feature_vectors.size(); j++){
             for(const vector<double>& centroid : centroid_list) {
                 distance_list[j].push_back(calculate_distance(feature_vectors[j], centroid));
             }
-        }
-        #pragma omp parallel for shared(distance_list, min_dist_list) default(none)
-        for(int j=0; j<distance_list.size(); j++){
             min_dist_list[j] = pow(*min_element(distance_list[j].begin(), distance_list[j].end()), 2);
         }
         sum = accumulate(min_dist_list.begin(), min_dist_list.end(), 0);
-        for(double & min : min_dist_list){
-            min /= sum;
+        #pragma omp parallel for shared(min_dist_list, sum) default(none)
+        for(int j=0; j<min_dist_list.size(); j++){
+            min_dist_list[j] /= sum;
         }
 
         sum = accumulate(min_dist_list.begin(), min_dist_list.end(), 0);
@@ -106,24 +100,6 @@ vector<vector<vector<double>>> k_means_clustering(vector<vector<double>> feature
         }
         double total_compare = 0;
         double start_compare = omp_get_wtime();
-//         #pragma omp parallel for shared(feature_vectors, k, centroid_list, result_clusters, lock) default(none)
-//         for (int l = 0; l > feature_vectors.size(); l++) {
-//             vector<double> compare_list(k, 0);
-//             // #pragma omp parallel for shared(centroid_list, compare_list, vec) default(none)
-            
-//             for (int j = 0; j < centroid_list.size(); j++) {
-//                 compare_list[j] = calculate_distance(feature_vectors[l], centroid_list[j]);
-//             }
-            
-// //            double min = *min_element(compare_list.begin(), compare_list.end());
-//             int min_index = min_element(compare_list.begin(), compare_list.end()) - compare_list.begin();
-//             omp_set_lock(&lock);
-//             result_clusters[min_index].push_back(feature_vectors[l]);
-//             // cout << end_compare << endl;
-//             omp_unset_lock(&lock);
-//         }
-//         double end_compare = omp_get_wtime() - start_compare;
-//         cout << "Compare time for i = " << i << ": " << end_compare << endl;
         for (vector<double> vec : feature_vectors) {
             vector<double> compare_list(k, 0);
             #pragma omp parallel for shared(centroid_list, compare_list, vec) default(none)
@@ -163,54 +139,28 @@ string trim(const string& s)
     return (start == string::npos) ? "" : s.substr(start);
 }
 
-struct VectorHasher {
-    int operator()(const vector<double> &V) const {
-        int hash=0;
-        for(int i : V) {
-            hash+=i; // Can be anything
-        }
-        return hash;
-    }
-};
-
 int main(int argc, char** argv) {
     omp_set_num_threads(atoi(argv[3]));
     int num_files = atoi(argv[1]);
     string dirpath = "/deac/classes/csc726/willpj18/Parallel_K-Means/Test_Data2";
     boost::filesystem::path dir(dirpath);
-//    string path = "/Users/patrick/CLionProjects/Parallel_K-Means/691_Data";
     vector<string> filenames;
-    // for(const auto & iter : fs::directory_iterator(dirpath)) {
-    //     filenames.push_back(iter.path());
-    // }
     int file_count = 0;
     if(is_directory(dir)) {
-        // std::cout << dir << " is a directory containing:\n";
-
         for(auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(dir), {})){
             if(file_count == num_files){
                 break;
             }
-            // std::cout << entry.path() << "\n";
             filenames.push_back(entry.path().string());
             file_count++;
         }
     }
     vector<vector<double>> all_feature_vectors(filenames.size());
-//    unordered_map<vector<double>, string, VectorHasher> dict;
     double start_feature_extraction = omp_get_wtime();
-    // fs::directory_iterator iterator = fs::directory_iterator(path);
-//    #pragma omp parallel for
-//    for(fs::directory_entry x=iterator; x != nullptr; x++){
-//
-//    }
 
-//    fs::directory_iterator container = fs::directory_iterator(path);
-//    #pragma omp parallel for
-//    for(auto iter = begin(container); iter != end(container); iter++) {
+
     #pragma omp parallel for shared(all_feature_vectors, filenames) default(none)
     for(int i=0; i < filenames.size(); i++) {
-//        cout << iter->path() << endl;
         string file_path = filenames[i];
         ifstream myfile(file_path);
         string line;
@@ -225,49 +175,28 @@ int main(int argc, char** argv) {
                 line = trim(line);
                 if(!(line.find("import", 0) == 0 || line.find("//", 0) == 0 || line.find("{", 0) == 0 || line.find("}", 0) == 0 || line == "")){
                     lines_code++;
-//need to strip whitespace from lines
                 }
-//                cout << line << '\n';
             }
             myfile.close();
         }
         double code_percent = (double)lines_code / line_count;
         int bracket_count = count(file_str, "{");
         int comment_count = count(file_str, "//") + count(file_str, "*/");
-//        cout << "Bracket Count: " << bracket_count << endl;
-//        cout << "Comment Count: " << comment_count << endl;
-//        cout << "% Code: " << code_percent << endl;
         file_features.push_back(bracket_count);
         file_features.push_back(comment_count);
         file_features.push_back(code_percent);
-//        dict[file_features] = file_path;
         all_feature_vectors[i] = file_features;
         file_features.clear();
-//        cout << dict[file_features] << endl;
-
     }
-
     double elapsed_feature_extraction = omp_get_wtime() - start_feature_extraction;
     std::cout << "Feature Extraction Time: " << elapsed_feature_extraction << endl;
+
+
     double start_clustering = omp_get_wtime();
     vector<double> mean = calculate_mean_vector(all_feature_vectors);
     double s = WCSS(all_feature_vectors, mean);
-
     vector<vector<vector<double>>> clusters = k_means_clustering(all_feature_vectors, atoi(argv[2]));
-
-//    int cluster_index = 0;
-//    for(vector<vector<double>> cluster : clusters){
-//        cout << "Cluster " << cluster_index + 1 << " size: " << cluster.size() << endl;
-////        cout << "Cluster " << cluster_index + 1 << ": " << endl;
-////        for(vector<double> v : cluster){
-////            cout << dict[v] << endl;
-////        }
-//        cout << "WCSS: " << WCSS(cluster, calculate_mean_vector(cluster)) << endl << endl;
-//        cluster_index++;
-//    }
-//    double b = BCSS(clusters, mean);
     double elapsed_clustering = omp_get_wtime() - start_clustering;
-//    cout << "BCSS: " << b << endl;
     std::cout << "        Clustering Time: " << elapsed_clustering << endl;
-//    test();
+    cout << "             Total Time: " << omp_get_wtime() - start_feature_extraction << endl;
 }
