@@ -1,6 +1,8 @@
 #include <iostream>
 #include <string>
-#include <filesystem>
+#include <boost/filesystem.hpp>
+#include <boost/range.hpp>
+// #include <filesystem>
 #include <fstream>
 #include <vector>
 #include <streambuf>
@@ -10,9 +12,11 @@
 #include <unordered_map>
 #include <omp.h>
 #include <ctime>
+ 
 
-namespace fs = std::__fs::filesystem;
+// namespace fs = std::__fs::filesystem;
 using namespace std;
+// using namespace boost::filesystem;
 
 double calculate_distance(vector<double> x, vector<double> y){
     double euclidean = 0;
@@ -92,12 +96,34 @@ double BCSS(const vector<vector<vector<double>>>& all_clusters, vector<double> c
 }
 
 vector<vector<vector<double>>> k_means_clustering(vector<vector<double>> feature_vectors, int k) {
+    omp_lock_t lock;
+    omp_init_lock(&lock);
     vector<vector<double>> centroid_list = choose_initial_centroids(feature_vectors, k);
     vector<vector<vector<double>>> result_clusters(k);
     for (int i = 0; i <= 10; i++) {
         for(vector<vector<double>> & cluster : result_clusters){
             cluster.clear();
         }
+        double total_compare = 0;
+        double start_compare = omp_get_wtime();
+//         #pragma omp parallel for shared(feature_vectors, k, centroid_list, result_clusters, lock) default(none)
+//         for (int l = 0; l > feature_vectors.size(); l++) {
+//             vector<double> compare_list(k, 0);
+//             // #pragma omp parallel for shared(centroid_list, compare_list, vec) default(none)
+            
+//             for (int j = 0; j < centroid_list.size(); j++) {
+//                 compare_list[j] = calculate_distance(feature_vectors[l], centroid_list[j]);
+//             }
+            
+// //            double min = *min_element(compare_list.begin(), compare_list.end());
+//             int min_index = min_element(compare_list.begin(), compare_list.end()) - compare_list.begin();
+//             omp_set_lock(&lock);
+//             result_clusters[min_index].push_back(feature_vectors[l]);
+//             // cout << end_compare << endl;
+//             omp_unset_lock(&lock);
+//         }
+//         double end_compare = omp_get_wtime() - start_compare;
+//         cout << "Compare time for i = " << i << ": " << end_compare << endl;
         for (vector<double> vec : feature_vectors) {
             vector<double> compare_list(k, 0);
             #pragma omp parallel for shared(centroid_list, compare_list, vec) default(none)
@@ -108,10 +134,14 @@ vector<vector<vector<double>>> k_means_clustering(vector<vector<double>> feature
             int min_index = min_element(compare_list.begin(), compare_list.end()) - compare_list.begin();
             result_clusters[min_index].push_back(vec);
         }
+        double start_centroid = omp_get_wtime();
         #pragma omp parallel for shared(centroid_list, result_clusters) default(none)
         for(int j = 0; j < centroid_list.size(); j++){
+            // cout << j << endl;
             centroid_list[j] = calculate_mean_vector(result_clusters[j]);
         }
+        double end_centroid = omp_get_wtime() - start_centroid;
+        // cout << '\t' << "Centroid time for i = " << i << ": " << end_centroid << endl;
     }
     return result_clusters;
 }
@@ -143,18 +173,33 @@ struct VectorHasher {
     }
 };
 
-int main() {
-    omp_set_num_threads(4);
-    string path = "/Users/patrick/CLionProjects/Parallel_K-Means/Set1";
+int main(int argc, char** argv) {
+    omp_set_num_threads(atoi(argv[3]));
+    int num_files = atoi(argv[1]);
+    string dirpath = "/deac/classes/csc726/willpj18/Parallel_K-Means/Test_Data2";
+    boost::filesystem::path dir(dirpath);
 //    string path = "/Users/patrick/CLionProjects/Parallel_K-Means/691_Data";
     vector<string> filenames;
-    for(const auto & iter : fs::directory_iterator(path)) {
-        filenames.push_back(iter.path());
+    // for(const auto & iter : fs::directory_iterator(dirpath)) {
+    //     filenames.push_back(iter.path());
+    // }
+    int file_count = 0;
+    if(is_directory(dir)) {
+        // std::cout << dir << " is a directory containing:\n";
+
+        for(auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(dir), {})){
+            if(file_count == num_files){
+                break;
+            }
+            // std::cout << entry.path() << "\n";
+            filenames.push_back(entry.path().string());
+            file_count++;
+        }
     }
     vector<vector<double>> all_feature_vectors(filenames.size());
 //    unordered_map<vector<double>, string, VectorHasher> dict;
     double start_feature_extraction = omp_get_wtime();
-    fs::directory_iterator iterator = fs::directory_iterator(path);
+    // fs::directory_iterator iterator = fs::directory_iterator(path);
 //    #pragma omp parallel for
 //    for(fs::directory_entry x=iterator; x != nullptr; x++){
 //
@@ -203,12 +248,12 @@ int main() {
     }
 
     double elapsed_feature_extraction = omp_get_wtime() - start_feature_extraction;
-    cout << "Feature Extraction Time: " << elapsed_feature_extraction << endl;
+    std::cout << "Feature Extraction Time: " << elapsed_feature_extraction << endl;
     double start_clustering = omp_get_wtime();
     vector<double> mean = calculate_mean_vector(all_feature_vectors);
     double s = WCSS(all_feature_vectors, mean);
 
-    vector<vector<vector<double>>> clusters = k_means_clustering(all_feature_vectors, 7);
+    vector<vector<vector<double>>> clusters = k_means_clustering(all_feature_vectors, atoi(argv[2]));
 
 //    int cluster_index = 0;
 //    for(vector<vector<double>> cluster : clusters){
@@ -223,6 +268,6 @@ int main() {
 //    double b = BCSS(clusters, mean);
     double elapsed_clustering = omp_get_wtime() - start_clustering;
 //    cout << "BCSS: " << b << endl;
-    cout << "        Clustering Time: " << elapsed_clustering << endl;
+    std::cout << "        Clustering Time: " << elapsed_clustering << endl;
 //    test();
 }
