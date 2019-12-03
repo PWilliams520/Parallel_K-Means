@@ -1,0 +1,30 @@
+Feature Extraction Time: 0.194358
+        Clustering Time: 0.0722502
+             Total Time: 0.266669
+          Total Threads: 1
+        Number of Files: 500
+Feature Extraction Time: 0.20226
+        Clustering Time: 0.165662
+             Total Time: 0.36804
+          Total Threads: 2
+        Number of Files: 1000
+Feature Extraction Time: 0.23413
+        Clustering Time: 0.235898
+             Total Time: 0.470102
+          Total Threads: 4
+        Number of Files: 2000
+Feature Extraction Time: 0.263783
+        Clustering Time: 0.397294
+             Total Time: 0.661159
+          Total Threads: 8
+        Number of Files: 4000
+Feature Extraction Time: 0.438927
+        Clustering Time: 0.745982
+             Total Time: 1.18502
+          Total Threads: 16
+        Number of Files: 8000
+Feature Extraction Time: 1.00434
+        Clustering Time: 1.68734
+             Total Time: 2.69181
+          Total Threads: 32
+        Number of Files: 13000

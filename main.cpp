@@ -199,4 +199,6 @@ int main(int argc, char** argv) {
     double elapsed_clustering = omp_get_wtime() - start_clustering;
     std::cout << "        Clustering Time: " << elapsed_clustering << endl;
     cout << "             Total Time: " << omp_get_wtime() - start_feature_extraction << endl;
+    cout << "          Total Threads: " << atoi(argv[3]) << endl;
+    cout << "        Number of Files: " << atoi(argv[1]) << endl;
 }
